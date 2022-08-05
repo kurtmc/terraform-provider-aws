@@ -347,6 +347,21 @@ func ResourceTarget() *schema.Resource {
 				},
 			},
 
+			"sagemaker_pipeline_target": {
+				Type:     schema.TypeList,
+				Optional: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"pipeline_parameters": {
+							Type:     schema.TypeMap,
+							Optional: true,
+							Elem:     &schema.Schema{Type: schema.TypeString},
+						},
+					},
+				},
+			},
+
 			"input_transformer": {
 				Type:          schema.TypeList,
 				Optional:      true,
@@ -515,6 +530,12 @@ func resourceTargetRead(d *schema.ResourceData, meta interface{}) error {
 		}
 	}
 
+	if t.SageMakerPipelineParameters != nil {
+		if err := d.Set("sagemaker_pipeline_target", flattenTargetSagemakerPipelineParameters(t.SageMakerPipelineParameters)); err != nil {
+			return fmt.Errorf("Error setting sagemaker_pipeline_target error: %w", err)
+		}
+	}
+
 	if t.InputTransformer != nil {
 		if err := d.Set("input_transformer", flattenInputTransformer(t.InputTransformer)); err != nil {
 			return fmt.Errorf("Error setting input_transformer error: %w", err)
@@ -621,6 +642,10 @@ func buildPutTargetInputStruct(d *schema.ResourceData) *eventbridge.PutTargetsIn
 
 	if v, ok := d.GetOk("sqs_target"); ok && len(v.([]interface{})) > 0 && v.([]interface{})[0] != nil {
 		e.SqsParameters = expandTargetSQSParameters(v.([]interface{}))
+	}
+
+	if v, ok := d.GetOk("sagemaker_pipeline_target"); ok && len(v.([]interface{})) > 0 && v.([]interface{})[0] != nil {
+		e.SageMakerPipelineParameters = expandTargetSagemakerPiplineParameters(v.([]interface{})[0].(map[string]interface{}))
 	}
 
 	if v, ok := d.GetOk("input_transformer"); ok && len(v.([]interface{})) > 0 && v.([]interface{})[0] != nil {
@@ -831,6 +856,21 @@ func expandTargetSQSParameters(config []interface{}) *eventbridge.SqsParameters 
 
 	return sqsParameters
 }
+func expandTargetSagemakerPiplineParameters(tfMap map[string]interface{}) *eventbridge.SageMakerPipelineParameters {
+	if tfMap == nil {
+		return nil
+	}
+
+	apiObject := &eventbridge.SageMakerPipelineParameters{}
+
+	if v, ok := tfMap["pipeline_parameters"].(map[string]interface{}); ok && len(v) > 0 {
+		for parameterKey, parameterValue := range flex.ExpandStringValueMap(v) {
+			apiObject.PipelineParameterList = append(apiObject.PipelineParameterList, &eventbridge.SageMakerPipelineParameter{Name: aws.String(parameterKey), Value: aws.String(parameterValue)})
+		}
+	}
+
+	return apiObject
+}
 
 func expandTargetHTTPParameters(tfMap map[string]interface{}) *eventbridge.HttpParameters {
 	if tfMap == nil {
@@ -980,6 +1020,17 @@ func flattenTargetSQSParameters(sqsParameters *eventbridge.SqsParameters) []map[
 	config["message_group_id"] = aws.StringValue(sqsParameters.MessageGroupId)
 	result := []map[string]interface{}{config}
 	return result
+}
+
+func flattenTargetSagemakerPipelineParameters(sagemakerPipelineParameters *eventbridge.SageMakerPipelineParameters) map[string]interface{} {
+	tfMap := map[string]interface{}{}
+
+	parameters := make(map[string]string)
+	for _, v := range sagemakerPipelineParameters.PipelineParameterList {
+		parameters[*v.Name] = *v.Value
+	}
+	tfMap["pipeline_parameters"] = parameters
+	return tfMap
 }
 
 func flattenTargetHTTPParameters(apiObject *eventbridge.HttpParameters) map[string]interface{} {

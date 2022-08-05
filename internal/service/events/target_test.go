@@ -367,7 +367,7 @@ func TestAccEventsTarget_http(t *testing.T) {
 	})
 }
 
-//https://github.com/hashicorp/terraform-provider-aws/issues/23805
+// https://github.com/hashicorp/terraform-provider-aws/issues/23805
 func TestAccEventsTarget_http_params(t *testing.T) {
 	resourceName := "aws_cloudwatch_event_target.test"
 
@@ -2031,3 +2031,35 @@ resource "aws_sns_topic" "test" {
 }
 `, rName, eventBusName)
 }
+
+func testAccTargetSagemakerPipelineBaseConfig(name, eventBusName string) string {
+	return fmt.Sprintf(`
+resource "aws_cloudwatch_event_rule" "test" {
+  name           = %[1]q
+  event_bus_name = %[2]q
+
+  event_pattern = <<PATTERN
+{
+  "source": ["aws.ec2"]
+}
+PATTERN
+}
+
+resource "aws_cloudwatch_event_target" "test" {
+  rule           = aws_cloudwatch_event_rule.test.name
+  event_bus_name = aws_cloudwatch_event_rule.test.event_bus_name
+  target_id      = %[1]q
+
+  arn  = "arn:aws:sagemaker:ap-southeast-2:329193457145:pipeline/samz-testing-mlops-p-twfpnnm4oea2"
+
+  sagemaker_pipeline_target {
+    pipeline_parameters = {
+      ProcessingInstanceType = "ml.c5.2xlarge",
+      TrainingInstanceType   = "ml.c5.xlarge",
+      InputData = "$.detail.s3bucket",
+      EndpointInstanceType = "ml.m5.large"
+    }
+  }
+}
+
+`, name)
